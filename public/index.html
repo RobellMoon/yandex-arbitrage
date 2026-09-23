@@ -155,13 +155,59 @@
         Текущий месяц
     </button>
 
-    <button class="period-btn" data-period="custom">
-        Выбрать период
-    </button>
+    <button class="period-btn" data-period="custom" id="custom-period-btn">
+    Выбрать период
+</button>
 
 </div>
 
-        </header>
+<div class="custom-period-modal" id="custom-period-modal">
+
+    <div class="custom-period-modal-content">
+
+        <div class="custom-period-title">
+            Выберите период
+        </div>
+
+        <div class="custom-period-fields">
+
+            <div class="custom-period-field">
+                <label>С</label>
+                <input type="date" id="custom-from-date">
+            </div>
+
+            <div class="custom-period-field">
+                <label>По</label>
+                <input type="date" id="custom-to-date">
+            </div>
+
+        </div>
+
+        <div class="custom-period-actions">
+
+            <button
+                type="button"
+                class="custom-period-cancel"
+                id="custom-period-cancel"
+            >
+                Отмена
+            </button>
+
+            <button
+                type="button"
+                class="custom-period-apply"
+                id="custom-period-apply"
+            >
+                Применить
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+</header>
 
 
         <!-- STAT CARDS -->
@@ -272,14 +318,33 @@
 
             <div class="panel-header">
 
-                <div>
-                    <h2>Звонки</h2>
-                    <div class="panel-subtitle">
-                        Все квалифицированные звонки
-                    </div>
-                </div>
+    <div>
 
-            </div>
+        <h2>Звонки</h2>
+
+        <div class="panel-subtitle">
+            Все квалифицированные звонки
+        </div>
+
+    </div>
+
+    <div class="calls-selection-bar">
+
+        <div class="calls-selection-info">
+            <span id="selected-calls-count">0 выбрано</span>
+        </div>
+
+        <button
+            id="export-excel-btn"
+            class="export-excel-btn"
+            style="display: none;"
+        >
+            Сформировать Excel
+        </button>
+
+    </div>
+
+</div>
 
             <div class="table-wrapper">
 
@@ -287,6 +352,7 @@
 
                     <thead>
                     <tr>
+                        <th></th>
                         <th>Дата</th>
                         <th>Проект</th>
                         <th>Телефон</th>
@@ -313,6 +379,9 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Excel -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
 <script src="js/data.js"></script>
 <script src="js/projects.js"></script>

@@ -6,7 +6,8 @@ let selectedPeriod = "today";
 let selectedChart = "calls";
 
 let currentCalls = [];
-
+let selectedCallIds = new Set();
+let callComments = {};
 
 // ============================================================
 // INITIALIZATION
@@ -16,6 +17,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     initPeriodButtons();
     initChartButtons();
+    initCustomPeriod();
+    initExcelExport();
 
     renderDashboard();
 
@@ -42,6 +45,13 @@ function initPeriodButtons() {
 
             selectedPeriod = button.dataset.period;
 
+            // Закрываем окно выбора периода
+            const modal = document.getElementById("custom-period-modal");
+
+            if (modal && selectedPeriod !== "custom") {
+                modal.classList.remove("open");
+            }
+
             renderDashboard();
 
         });
@@ -50,6 +60,113 @@ function initPeriodButtons() {
 
 }
 
+// ============================================================
+// CUSTOM PERIOD
+// ============================================================
+
+function initCustomPeriod() {
+
+    const button = document.getElementById("custom-period-btn");
+    const modal = document.getElementById("custom-period-modal");
+    const cancelButton = document.getElementById("custom-period-cancel");
+    const applyButton = document.getElementById("custom-period-apply");
+
+    const fromInput = document.getElementById("custom-from-date");
+    const toInput = document.getElementById("custom-to-date");
+
+
+    if (!button || !modal || !cancelButton || !applyButton) {
+        return;
+    }
+
+
+    // Открыть окно
+
+    button.addEventListener("click", () => {
+
+        const today = new Date();
+        const todayString = today.toISOString().split("T")[0];
+
+        if (!fromInput.value) {
+            fromInput.value = todayString;
+        }
+
+        if (!toInput.value) {
+            toInput.value = todayString;
+        }
+
+        modal.classList.add("open");
+
+    });
+
+
+    // Отмена
+
+    cancelButton.addEventListener("click", () => {
+
+        modal.classList.remove("open");
+
+    });
+
+
+    // Клик по затемнённому фону
+
+    modal.addEventListener("click", (event) => {
+
+        if (event.target === modal) {
+            modal.classList.remove("open");
+        }
+
+    });
+
+
+    // Применить
+
+    applyButton.addEventListener("click", () => {
+
+        const from = fromInput.value;
+        const to = toInput.value;
+
+
+        if (!from || !to) {
+
+            alert("Выберите обе даты.");
+
+            return;
+
+        }
+
+
+        if (from > to) {
+
+            alert("Дата начала не может быть позже даты окончания.");
+
+            return;
+
+        }
+
+
+        // Сохраняем выбранные даты
+
+        window.customPeriodFrom = from;
+        window.customPeriodTo = to;
+
+
+        selectedPeriod = "custom";
+
+
+        // Закрываем окно
+
+        modal.classList.remove("open");
+
+
+        // Обновляем данные
+
+        renderDashboard();
+
+    });
+
+}
 
 // ============================================================
 // CHART TYPE
@@ -84,35 +201,146 @@ function initChartButtons() {
 // GET CALLS FOR CURRENT PAGE
 // ============================================================
 
-function getCallsForCurrentPage() {
+async function getCallsForCurrentPage() {
 
-    let calls = [...CALLS];
+    const today = new Date();
+
+    const formatDate = (date) => {
+        return date.toISOString().split("T")[0];
+    };
+
+    let toDate = formatDate(today);
+
+    let fromDate = toDate;
 
 
-    // Яндекс Недвижимость
-    // Показываем все проекты
+    // ========================================================
+    // ПЕРИОД
+    // ========================================================
 
-    if (currentPage === "all") {
+    if (selectedPeriod === "7") {
 
-        return calls;
+        const date = new Date(today);
+        date.setDate(date.getDate() - 6);
+
+        fromDate = formatDate(date);
 
     }
 
+    else if (selectedPeriod === "30") {
 
-    // Конкретный проект
+        const date = new Date(today);
+        date.setDate(date.getDate() - 29);
+
+        fromDate = formatDate(date);
+
+    }
+
+    else if (selectedPeriod === "month") {
+
+        const date = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            1
+        );
+
+        fromDate = formatDate(date);
+
+    }
+
+    else if (selectedPeriod === "custom") {
+
+    fromDate = window.customPeriodFrom || toDate;
+    toDate = window.customPeriodTo || toDate;
+
+}
+
+
+    // ========================================================
+    // API
+    // ========================================================
+
+    const response = await fetch(
+        `/api/yandex/calls?from_date=${fromDate}&to_date=${toDate}`
+    );
+
+    if (!response.ok) {
+        throw new Error(`Ошибка API: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+
+    // ========================================================
+    // ПРЕОБРАЗУЕМ API В ФОРМАТ СТАРОГО UI
+    // ========================================================
+
+    let calls = (data.calls || []).map(call => ({
+
+        id: call.id,
+
+        date: call.timestamp
+            ? call.timestamp.substring(0, 10)
+            : "",
+
+        time: call.timestamp
+            ? call.timestamp.substring(11, 16)
+            : "",
+
+        project: call.projectName || "",
+
+        phone: call.incomingPhone || "",
+
+        waitDuration: call.waitDuration || 0,
+
+        callDuration: call.callDuration || 0,
+
+        cost: Number(call.currentRevenue) || 0,
+
+        status: mapAPIStatusToUI(call.displayStatus),
+
+        objectName: call.objectName || "",
+
+        objectType: call.objectType || "",
+
+        incomingPhone: call.incomingPhone || "",
+
+        internalPhone: call.internalPhone || "",
+
+        campaignTariff: call.campaignTariff || "",
+
+        clientTariff: call.clientTariff || "",
+
+        originalRevenue:
+            Number(call.originalRevenue) || 0,
+
+        currentRevenue:
+            Number(call.currentRevenue) || 0,
+
+        yandexComplaintStatus:
+            call.yandexComplaintStatus || null,
+
+        yandexRefundAmount:
+            Number(call.yandexRefundAmount) || 0
+
+    }));
+
+
+    // ========================================================
+    // ФИЛЬТР ПРОЕКТА
+    // ========================================================
 
     if (currentPage === "barsa") {
 
-        return calls.filter(
+        calls = calls.filter(
             call => call.project === "Барса"
         );
 
     }
 
+    else if (currentPage === "stolitsyno") {
 
-    if (currentPage === "stolitsyno") {
-
-        return calls.filter(
+        calls = calls.filter(
             call => call.project === "Столицыно"
         );
 
@@ -120,13 +348,37 @@ function getCallsForCurrentPage() {
 
 
     return calls;
-
 }
-
 
 // ============================================================
 // PERIOD FILTER
 // ============================================================
+
+function mapAPIStatusToUI(status) {
+
+    switch (status) {
+
+        case "qualified":
+            return "qualified";
+
+        case "pending":
+            return "pending";
+
+        case "returned":
+            return "returned";
+
+        case "rejected":
+            return "rejected";
+
+        case "free":
+            return "free";
+
+        default:
+            return "free";
+
+    }
+
+}
 
 // ============================================================
 // PERIOD FILTER
@@ -228,25 +480,45 @@ function filterCallsByPeriod(calls) {
 // MAIN DASHBOARD RENDER
 // ============================================================
 
-function renderDashboard() {
+async function renderDashboard() {
 
-    let calls = getCallsForCurrentPage();
+    try {
 
-    calls = filterCallsByPeriod(calls);
+        const calls =
+            await getCallsForCurrentPage();
 
-    currentCalls = calls;
+        currentCalls = calls;
 
 
-    renderStats(calls);
+        renderStats(calls);
 
-    renderDailyTable(calls);
+        renderDailyTable(calls);
 
-    renderCallsTable(calls);
+        renderCallsTable(calls);
 
-    renderChart();
+        renderChart();
+
+
+    } catch (error) {
+
+        console.error(
+            "Ошибка загрузки данных Яндекса:",
+            error
+        );
+
+        currentCalls = [];
+
+        renderStats([]);
+
+        renderDailyTable([]);
+
+        renderCallsTable([]);
+
+        renderChart();
+
+    }
 
 }
-
 
 // ============================================================
 // STATISTICS
@@ -364,7 +636,7 @@ function renderDailyTable(calls) {
 
     const tbody =
         document.getElementById("daily-table");
-
+        
 
     if (!tbody) return;
 
@@ -403,24 +675,22 @@ function renderDailyTable(calls) {
 
 
             row.innerHTML = `
+    <td>
+        ${formatDate(day.date)}
+    </td>
 
-                <td>
-                    ${formatDate(day.date)}
-                </td>
+    <td>
+        <strong>${day.calls}</strong>
+    </td>
 
-                <td>
-                    <strong>${day.calls}</strong>
-                </td>
-
-                <td>
-                    ${formatMoney(day.expense)}
-                </td>
-
-            `;
+    <td>
+        ${formatMoney(day.expense)}
+    </td>
+`;
 
 
             tbody.appendChild(row);
-
+            
         });
 
 }
@@ -430,80 +700,96 @@ function renderDailyTable(calls) {
 // CALLS TABLE
 // ============================================================
 
+	// ============================================================
+// CALLS TABLE
+// ============================================================
+
 function renderCallsTable(calls) {
 
     const tbody =
         document.getElementById("calls-table");
 
-
     if (!tbody) return;
 
-
     tbody.innerHTML = "";
+
+    // Сбрасываем выбор при перерисовке таблицы
+    selectedCallIds.clear();
+
+    updateSelectionUI();
 
 
     if (!calls.length) {
 
         tbody.innerHTML = `
             <tr>
-                <td colspan="8">
+                <td colspan="9">
                     Нет звонков за выбранный период
                 </td>
             </tr>
         `;
 
         return;
-
     }
 
 
     calls
-
         .slice()
         .sort(
             (a, b) =>
-                new Date(
-                    `${b.date} ${b.time}`
-                ) -
-                new Date(
-                    `${a.date} ${a.time}`
-                )
+                new Date(`${b.date} ${b.time}`) -
+                new Date(`${a.date} ${a.time}`)
         )
-
         .forEach(call => {
 
             const row =
                 document.createElement("tr");
 
+            const callId =
+                String(call.id);
+
 
             row.innerHTML = `
 
+                <td class="call-select-cell">
+
+                    <input
+                        type="checkbox"
+                        class="call-checkbox"
+                        data-call-id="${callId}"
+                    >
+
+                </td>
+
+
                 <td>
                     ${formatDate(call.date)}
+
                     <span class="call-time">
                         ${call.time}
                     </span>
                 </td>
 
+
                 <td>
                     ${call.project}
                 </td>
+
 
                 <td>
                     ${call.phone}
                 </td>
 
-                <td>
-                    ${formatDuration(
-                        call.waitDuration
-                    )}
-                </td>
 
                 <td>
-                    ${formatDuration(
-                        call.callDuration
-                    )}
+                    ${formatDuration(call.waitDuration)}
                 </td>
+
+
+                <td>
+                    ${formatDuration(call.callDuration)}
+                </td>
+
 
                 <td>
                     <strong>
@@ -511,17 +797,30 @@ function renderCallsTable(calls) {
                     </strong>
                 </td>
 
+
                 <td>
                     ${renderStatus(call.status)}
                 </td>
 
-                <td>
+
+                <td class="call-actions-cell">
+
                     <button
                         class="action-btn"
                         onclick="openCall('${call.id}')"
                     >
                         Подробнее
                     </button>
+
+
+                    <button
+                        class="action-btn comment-btn"
+                        data-comment-id="${callId}"
+                        style="display: none;"
+                    >
+                        Добавить комментарий
+                    </button>
+
                 </td>
 
             `;
@@ -529,10 +828,353 @@ function renderCallsTable(calls) {
 
             tbody.appendChild(row);
 
+
+            // ====================================================
+            // CHECKBOX
+            // ====================================================
+
+            const checkbox =
+                row.querySelector(".call-checkbox");
+
+
+            const commentButton =
+                row.querySelector(".comment-btn");
+
+
+            checkbox.addEventListener("change", () => {
+
+                if (checkbox.checked) {
+
+                    selectedCallIds.add(callId);
+
+                    row.classList.add("selected");
+
+                    // Показываем кнопку комментария
+                    commentButton.style.display =
+                        "inline-flex";
+
+                } else {
+
+                    selectedCallIds.delete(callId);
+
+                    row.classList.remove("selected");
+
+                    // Скрываем кнопку комментария
+                    commentButton.style.display =
+                        "none";
+
+                }
+
+
+                updateSelectionUI();
+
+            });
+
+
+            // ====================================================
+            // COMMENT BUTTON
+            // ====================================================
+
+            commentButton.addEventListener("click", () => {
+
+                openCommentEditor(
+                    callId,
+                    row,
+                    commentButton
+                );
+
+            });
+
         });
 
 }
 
+// ============================================================
+// COMMENT EDITOR
+// ============================================================
+
+function openCommentEditor(
+    callId,
+    row,
+    commentButton
+) {
+
+    // Если редактор уже существует — не создаём второй
+    if (row.querySelector(".comment-editor")) {
+        return;
+    }
+
+
+    const currentComment =
+        callComments[callId] || "";
+
+
+    const editor =
+        document.createElement("div");
+
+    editor.className =
+        "comment-editor";
+
+
+    editor.innerHTML = `
+
+        <textarea
+            class="comment-input"
+            placeholder="Введите комментарий..."
+        >${escapeHtml(currentComment)}</textarea>
+
+        <div class="comment-editor-actions">
+
+            <button
+                type="button"
+                class="comment-save-btn"
+            >
+                Сохранить
+            </button>
+
+            <button
+                type="button"
+                class="comment-cancel-btn"
+            >
+                Отмена
+            </button>
+
+        </div>
+
+    `;
+
+
+    // Добавляем редактор после строки
+    row.after(editor);
+
+
+    const textarea =
+        editor.querySelector(".comment-input");
+
+
+    textarea.focus();
+
+
+    // ========================================================
+    // СОХРАНИТЬ
+    // ========================================================
+
+    editor
+        .querySelector(".comment-save-btn")
+        .addEventListener("click", () => {
+
+            callComments[callId] =
+                textarea.value.trim();
+
+
+            editor.remove();
+
+
+            commentButton.textContent =
+                callComments[callId]
+                    ? "Изменить комментарий"
+                    : "Добавить комментарий";
+
+        });
+
+
+    // ========================================================
+    // ОТМЕНА
+    // ========================================================
+
+    editor
+        .querySelector(".comment-cancel-btn")
+        .addEventListener("click", () => {
+
+            editor.remove();
+
+        });
+
+}
+
+
+// ============================================================
+// ESCAPE HTML
+// ============================================================
+
+function escapeHtml(value) {
+
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+}
+
+
+// ============================================================
+// SELECTION
+// ============================================================
+
+function updateSelectionUI() {
+
+    const countElement =
+        document.getElementById("selected-calls-count");
+
+    const exportButton =
+        document.getElementById("export-excel-btn");
+
+    const count =
+        selectedCallIds.size;
+
+    if (countElement) {
+        countElement.textContent =
+            `${count} выбрано`;
+    }
+
+    if (exportButton) {
+        exportButton.style.display =
+            count > 0 ? "inline-flex" : "none";
+    }
+
+}
+
+// ============================================================
+// EXPORT SELECTED CALLS TO EXCEL
+// ============================================================
+
+function initExcelExport() {
+
+    const exportButton =
+        document.getElementById("export-excel-btn");
+
+    if (!exportButton) {
+        return;
+    }
+
+    exportButton.addEventListener("click", async () => {
+
+        if (!selectedCallIds.size) {
+            return;
+        }
+
+        // Берём только выбранные звонки
+        const selectedCalls =
+            currentCalls.filter(call =>
+                selectedCallIds.has(String(call.id))
+            );
+
+        if (!selectedCalls.length) {
+            alert("Не удалось найти выбранные звонки.");
+            return;
+        }
+
+        const callIds = selectedCalls.map(call => Number(call.id));
+
+try {
+    const response = await fetch(
+        "/api/yandex/calls/mark-pending",
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(callIds)
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error("Не удалось обновить статус");
+    }
+
+    selectedCalls.forEach(call => {
+        call.status = "pending";
+    });
+
+} catch (error) {
+    console.error(error);
+    alert("Не удалось обновить статус звонков.");
+    return;
+}
+
+        // Формируем строки для Excel
+        const rows = selectedCalls.map(call => ({
+
+    "Дата":
+        formatDate(call.date),
+
+    "Время":
+        call.time || "",
+
+    "Проект":
+        call.project || "",
+
+    "Телефон":
+        call.phone || "",
+
+    "Ожидание":
+        formatDuration(call.waitDuration),
+
+    "Разговор":
+        formatDuration(call.callDuration),
+
+    "Стоимость":
+        Number(call.cost) || 0,
+
+    "Статус":
+        STATUS_NAMES[call.status] || call.status || "",
+
+    "Комментарий застройщика":
+    callComments[String(call.id)] || ""
+
+}));
+
+
+        // Создаём Excel-книгу
+        const worksheet =
+            XLSX.utils.json_to_sheet(rows);
+
+        const workbook =
+            XLSX.utils.book_new();
+
+
+        XLSX.utils.book_append_sheet(
+            workbook,
+            worksheet,
+            "Звонки"
+        );
+
+
+        // Ширина колонок
+        worksheet["!cols"] = [
+    { wch: 14 }, // Дата
+    { wch: 8 },  // Время
+    { wch: 18 }, // Проект
+    { wch: 18 }, // Телефон
+    { wch: 12 }, // Ожидание
+    { wch: 12 }, // Разговор
+    { wch: 14 }, // Стоимость
+    { wch: 18 }, // Статус
+    { wch: 45 }  // Комментарий
+];
+
+
+        // Имя файла
+        const today =
+            new Date()
+                .toISOString()
+                .split("T")[0];
+
+        const fileName =
+            `yandex-zvonki-${today}.xlsx`;
+
+
+        // Скачиваем Excel
+        XLSX.writeFile(
+            workbook,
+            fileName
+        );
+
+    });
+
+}
 
 // ============================================================
 // STATUS
@@ -631,4 +1273,66 @@ function renderChart() {
         selectedChart
     );
 
+}
+
+// ============================================================
+// DURATION
+// ============================================================
+
+function formatDuration(value) {
+
+    if (value === null || value === undefined || value === "") {
+        return "00:00";
+    }
+
+    // API Яндекса уже может отдавать HH:MM:SS
+    if (typeof value === "string" && value.includes(":")) {
+
+        const parts = value.split(":").map(Number);
+
+        if (parts.some(Number.isNaN)) {
+            return "00:00";
+        }
+
+        // HH:MM:SS
+        if (parts.length === 3) {
+
+            const hours = parts[0];
+            const minutes = parts[1];
+            const seconds = parts[2];
+
+            if (hours > 0) {
+                return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+            }
+
+            return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+        }
+
+        // MM:SS
+        if (parts.length === 2) {
+
+            return `${String(parts[0]).padStart(2, "0")}:${String(parts[1]).padStart(2, "0")}`;
+
+        }
+
+    }
+
+    // Если API когда-нибудь отдаст количество секунд
+    const secondsTotal = Number(value);
+
+    if (!Number.isFinite(secondsTotal) || secondsTotal < 0) {
+        return "00:00";
+    }
+
+    const hours = Math.floor(secondsTotal / 3600);
+    const minutes = Math.floor((secondsTotal % 3600) / 60);
+    const seconds = Math.floor(secondsTotal % 60);
+
+    if (hours > 0) {
+
+        return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+    }
+
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }

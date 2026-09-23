@@ -430,6 +430,8 @@ const STATUS_NAMES = {
 
     qualified: "Квалифицирован",
 
+    pending: "На рассмотрении",
+
     disputed: "Оспорен",
 
     returned: "Возвращено",

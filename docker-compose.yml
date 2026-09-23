@@ -1,0 +1,26 @@
+services:
+  yandex-arbitrage:
+    build: .
+    container_name: yandex-arbitrage
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      VIRTUAL_HOST: arbitrage.tochnodev.ru
+      VIRTUAL_PORT: 8000
+
+      LETSENCRYPT_HOST: arbitrage.tochnodev.ru
+      LETSENCRYPT_EMAIL: admin@tochnodev.ru
+
+    volumes:
+      - ./public:/app/public:ro
+      - ./data:/app/data
+
+    networks:
+      - web
+
+networks:
+  web:
+    external: true

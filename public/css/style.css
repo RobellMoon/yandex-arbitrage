@@ -491,7 +491,7 @@ body.project-page::after {
     letter-spacing: .08em;
 
     margin-bottom: 9px;
-}
+
 
     font-size: 10px;
     font-weight: 600;
@@ -844,6 +844,16 @@ tbody tr:hover {
     color: var(--green);
 }
 
+.status.pending {
+    color: #b77900;
+    background: #fff8e1;
+    border: 1px solid #f2c94c;
+}
+
+.status.pending::before {
+    background: #f2c94c;
+}
+
 .status.disputed {
     background: #fff6e5;
 
@@ -955,10 +965,8 @@ tbody tr:hover {
 
     .sidebar {
         position: relative;
-
         width: 100%;
         min-width: 0;
-
         height: auto;
         min-height: auto;
     }
@@ -981,7 +989,6 @@ tbody tr:hover {
 
     .period-selector {
         width: 100%;
-
         overflow-x: auto;
     }
 
@@ -996,4 +1003,254 @@ tbody tr:hover {
     .chart-container {
         height: 260px;
     }
+}
+
+
+/* ============================================================
+   CUSTOM PERIOD MODAL
+============================================================ */
+
+.custom-period-modal {
+    display: none;
+
+    position: fixed;
+    inset: 0;
+
+    z-index: 9999;
+
+    align-items: center;
+    justify-content: center;
+
+    background: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(3px);
+}
+
+.custom-period-modal.open {
+    display: flex;
+}
+
+.custom-period-modal-content {
+    width: 420px;
+    max-width: calc(100vw - 40px);
+
+    background: #ffffff;
+
+    border-radius: 16px;
+
+    padding: 24px;
+
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.18);
+
+    border: 1px solid #e6e7ea;
+}
+
+.custom-period-title {
+    font-size: 18px;
+    font-weight: 600;
+
+    margin-bottom: 22px;
+
+    color: #17181b;
+}
+
+.custom-period-fields {
+    display: flex;
+    gap: 16px;
+}
+
+.custom-period-field {
+    flex: 1;
+}
+
+.custom-period-field label {
+    display: block;
+
+    margin-bottom: 7px;
+
+    font-size: 13px;
+    font-weight: 500;
+
+    color: #858992;
+}
+
+.custom-period-field input {
+    width: 100%;
+    height: 42px;
+
+    padding: 0 11px;
+
+    border: 1px solid #dfe1e5;
+    border-radius: 9px;
+
+    background: #ffffff;
+
+    color: #17181b;
+
+    font-family: inherit;
+    font-size: 14px;
+
+    outline: none;
+}
+
+.custom-period-field input:focus {
+    border-color: #17181b;
+}
+
+.custom-period-actions {
+    display: flex;
+    justify-content: flex-end;
+
+    gap: 10px;
+
+    margin-top: 24px;
+}
+
+.custom-period-actions button {
+    height: 40px;
+
+    padding: 0 17px;
+
+    border-radius: 9px;
+
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+
+    cursor: pointer;
+
+    transition:
+        background 0.15s ease,
+        opacity 0.15s ease;
+}
+
+.custom-period-cancel {
+    border: 1px solid #e1e3e7;
+
+    background: #ffffff;
+
+    color: #17181b;
+}
+
+.custom-period-cancel:hover {
+    background: #f5f6f8;
+}
+
+.custom-period-apply {
+    border: 1px solid #17181b;
+
+    background: #17181b;
+
+    color: #ffffff;
+}
+
+.custom-period-apply:hover {
+    opacity: 0.88;
+}
+
+
+/* ============================================================
+   CUSTOM PERIOD MODAL — MOBILE
+============================================================ */
+
+@media (max-width: 700px) {
+
+    .custom-period-modal-content {
+        width: calc(100vw - 32px);
+        max-width: none;
+        padding: 20px;
+    }
+
+    .custom-period-fields {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+}
+/* ============================================================
+   CALL SELECTION
+============================================================ */
+
+.call-select-cell {
+    width: 44px;
+    text-align: center;
+    padding-left: 14px;
+    padding-right: 8px;
+}
+
+.call-checkbox {
+    width: 17px;
+    height: 17px;
+
+    cursor: pointer;
+
+    accent-color: #17181b;
+}
+
+#calls-table tr.selected {
+    background: #f1f2f4;
+}
+
+#calls-table tr.selected td {
+    background: #f1f2f4;
+}
+
+#calls-table tr {
+    transition: background 0.15s ease;
+}
+
+/* ============================================================
+   CALLS SELECTION
+============================================================ */
+
+.calls-selection-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-left: auto;
+}
+
+.calls-selection-info {
+    font-size: 14px;
+    color: #858992;
+    white-space: nowrap;
+}
+
+.export-excel-btn {
+    height: 38px;
+    min-width: 200px;
+
+    padding: 0 18px;
+
+    border: 1px solid #17181b;
+    border-radius: 8px;
+
+    background: #17181b;
+    color: #ffffff;
+
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    text-align: center;
+    line-height: 1;
+
+    cursor: pointer;
+
+    transition:
+        opacity 0.15s ease,
+        background 0.15s ease;
+}
+
+.export-excel-btn:hover {
+    opacity: 0.88;
+}
+
+.export-excel-btn:hover {
+    opacity: 0.88;
 }
