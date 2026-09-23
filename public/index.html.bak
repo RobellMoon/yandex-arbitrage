@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/jpeg" href="https://feed.tw1.ru/Tochno_Arbitrage/tochno-favicon.png">
+
+    <title>Yandex Arbitrage</title>
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+<div class="app">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+        <div class="logo">
+    <div class="logo-mark">
+        <img
+            src="https://feed.tw1.ru/Tochno_Arbitrage/tochno-logo.png"
+            alt="ТОЧНО"
+        >
+    </div>
+</div>
+
+        <div class="menu">
+
+            <div class="menu-section">
+                <div class="menu-title">КЛАССИФАЙДЫ</div>
+
+                <button class="menu-item active yandex-item" data-page="all">
+    Яндекс Недвижимость
+</button>
+            </div>
+
+            <div class="menu-section">
+
+                <div class="menu-title">ПРОЕКТЫ</div>
+
+               <button class="menu-item project-barsa" data-page="barsa">
+    <span class="menu-icon">●</span>
+    Барса
+</button>
+
+<button class="menu-item project-stolitsyno" data-page="stolitsyno">
+    <span class="menu-icon">●</span>
+    Столицыно
+</button>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Патрики <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Родные просторы <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Первое место <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Светский лес <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Хозяин Морей <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Роялта <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Цветной бульвар <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Собер-Баш курорт <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Васильевский Остров <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Кадерле <small>(скоро)</small>
+                </div>
+
+                <div class="menu-item disabled">
+                    <span class="menu-icon">○</span>
+                    Арт <small>(скоро)</small>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="sidebar-bottom">
+    <div class="connection-status">
+        <span></span>
+        Интеграции <small>(скоро)</small>
+    </div>
+</div>
+
+    </aside>
+
+
+    <!-- MAIN -->
+    <main class="main">
+
+        <header class="header">
+
+            <div>
+                <div class="breadcrumb">КЛАССИФАЙДЫ / ЯНДЕКС НЕДВИЖИМОСТЬ</div>
+                <h1 id="page-title">
+    <span class="page-title-yandex">
+        <img
+            src="https://upload.wikimedia.org/wikipedia/commons/f/f3/Yandex_Realty_icon.svg"
+            alt="Яндекс Недвижимость"
+        >
+    </span>
+    <span>Яндекс Недвижимость</span>
+</h1>
+            </div>
+
+            <div class="period-selector">
+
+    <button class="period-btn active" data-period="today">
+        Сегодня
+    </button>
+
+    <button class="period-btn" data-period="7">
+        7 дней
+    </button>
+
+    <button class="period-btn" data-period="30">
+        30 дней
+    </button>
+
+    <button class="period-btn" data-period="month">
+        Текущий месяц
+    </button>
+
+    <button class="period-btn" data-period="custom">
+        Выбрать период
+    </button>
+
+</div>
+
+        </header>
+
+
+        <!-- STAT CARDS -->
+
+        <section class="stats">
+
+            <div class="stat-card">
+                <div class="stat-label">ЗВОНКИ</div>
+                <div class="stat-value" id="total-calls">0</div>
+                <div class="stat-description">за выбранный период</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">РАСХОДЫ</div>
+                <div class="stat-value" id="total-expense">0 ₽</div>
+                <div class="stat-description">стоимость звонков</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">ОСПОРЕНО</div>
+                <div class="stat-value" id="total-disputed">0</div>
+                <div class="stat-description">звонков отправлено</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">ВОЗВРАЩЕНО</div>
+                <div class="stat-value" id="total-returned">0 ₽</div>
+                <div class="stat-description">сумма возврата</div>
+            </div>
+
+        </section>
+
+
+        <!-- CHART -->
+
+        <section class="panel">
+
+            <div class="panel-header">
+
+                <div>
+                    <h2>Динамика звонков</h2>
+                    <div class="panel-subtitle">
+                        Количество квалифицированных звонков по дням
+                    </div>
+                </div>
+
+                <div class="chart-switch">
+
+                    <button class="chart-btn active" data-chart="calls">
+                        Звонки
+                    </button>
+
+                    <button class="chart-btn" data-chart="expense">
+                        Расходы
+                    </button>
+
+                </div>
+
+            </div>
+
+            <div class="chart-container">
+                <canvas id="calls-chart"></canvas>
+            </div>
+
+        </section>
+
+
+        <!-- DAILY TABLE -->
+
+        <section class="panel">
+
+            <div class="panel-header">
+
+                <div>
+                    <h2>Динамика по дням</h2>
+                    <div class="panel-subtitle">
+                        Детальная статистика за выбранный период
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Звонки</th>
+                        <th>Расходы</th>
+                    </tr>
+                    </thead>
+
+                    <tbody id="daily-table">
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+
+        <!-- CALLS -->
+
+        <section class="panel">
+
+            <div class="panel-header">
+
+                <div>
+                    <h2>Звонки</h2>
+                    <div class="panel-subtitle">
+                        Все квалифицированные звонки
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Проект</th>
+                        <th>Телефон</th>
+                        <th>Ожидание</th>
+                        <th>Разговор</th>
+                        <th>Стоимость</th>
+                        <th>Статус</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+
+                    <tbody id="calls-table">
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="js/data.js"></script>
+<script src="js/projects.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

@@ -5,9 +5,8 @@ from datetime import datetime, date
 from typing import Optional
 
 import requests
-from fastapi import FastAPI, HTTPException, Query, Request, Form
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
 
@@ -26,21 +25,6 @@ DB_PATH = os.getenv(
     "DATABASE_PATH",
     "/app/data/arbitrage.db"
 )
-
-
-AUTH_LOGIN = os.getenv("AUTH_LOGIN")
-AUTH_PASSWORD = os.getenv("AUTH_PASSWORD")
-
-sessions = set()
-
-
-def is_authenticated(request: Request) -> bool:
-    session_id = request.cookies.get("session_id")
-
-    if not session_id:
-        return False
-
-    return session_id in sessions
 
 
 # ============================================================
@@ -1045,157 +1029,8 @@ def health():
 # FRONTEND
 # ============================================================
 
-
-@app.get("/login", response_class=HTMLResponse)
-def login_page():
-    return """
-    <!DOCTYPE html>
-    <html lang="ru">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Вход — ТОЧНО Арбитраж</title>
-
-        <style>
-            body {
-                margin: 0;
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: #f5f5f5;
-                font-family: Arial, sans-serif;
-            }
-
-            .login-wrapper {
-                width: 424px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-            }
-
-            .login-logo {
-                width: 150px;
-                height: auto;
-                display: block;
-                margin: 0 auto 25px auto;
-            }
-
-            .login-box {
-                width: 360px;
-                padding: 32px;
-                background: white;
-                border-radius: 16px;
-                box-shadow: 0 10px 40px rgba(0,0,0,.08);
-                text-align: center;
-            }
-
-            h1 {
-                margin: 0 0 24px;
-                font-size: 24px;
-            }
-
-            input {
-                width: 100%;
-                box-sizing: border-box;
-                padding: 13px;
-                margin-bottom: 12px;
-                border: 1px solid #ddd;
-                border-radius: 8px;
-                font-size: 15px;
-            }
-
-            button {
-                width: 100%;
-                padding: 13px;
-                border: 0;
-                border-radius: 8px;
-                background: #111;
-                color: white;
-                font-size: 15px;
-                cursor: pointer;
-            }
-        </style>
-    </head>
-
-    <body>
-        <div class="login-wrapper">
-
-            <img
-                src="https://feed.tw1.ru/Tochno_Arbitrage/tochno-favicon.png"
-                class="login-logo"
-                alt="ТОЧНО"
-            >
-
-            <div class="login-box">
-                <h1>ТОЧНО Арбитраж</h1>
-
-                <form method="post" action="/login">
-                    <input
-                        type="text"
-                        name="login"
-                        placeholder="Логин"
-                        required
-                    >
-
-                    <input
-                        type="password"
-                        name="password"
-                        placeholder="Пароль"
-                        required
-                    >
-
-                    <button type="submit">
-                        Войти
-                    </button>
-                </form>
-            </div>
-
-        </div>
-    </body>
-    </html>
-    """
-
-
-@app.post("/login")
-def login(
-    login: str = Form(...),
-    password: str = Form(...)
-):
-    if login != AUTH_LOGIN or password != AUTH_PASSWORD:
-        raise HTTPException(
-            status_code=401,
-            detail="Неверный логин или пароль"
-        )
-
-    import secrets
-
-    session_id = secrets.token_urlsafe(32)
-    sessions.add(session_id)
-
-    response = RedirectResponse(
-        url="/",
-        status_code=303
-    )
-
-    response.set_cookie(
-        key="session_id",
-        value=session_id,
-        httponly=True,
-        samesite="lax"
-    )
-
-    return response
-
-
 @app.get("/")
-def index(request: Request):
-
-    if not is_authenticated(request):
-        return RedirectResponse(
-            url="/login",
-            status_code=303
-        )
+def index():
 
     index_path = "/app/public/index.html"
 
@@ -1206,19 +1041,3 @@ def index(request: Request):
         )
 
     return FileResponse(index_path)
-
-# ============================================================
-# STATIC FRONTEND
-# ============================================================
-
-app.mount(
-    "/css",
-    StaticFiles(directory="/app/public/css"),
-    name="css"
-)
-
-app.mount(
-    "/js",
-    StaticFiles(directory="/app/public/js"),
-    name="js"
-)

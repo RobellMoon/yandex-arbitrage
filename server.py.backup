@@ -1,0 +1,658 @@
+import os
+from datetime import date, timedelta
+
+import requests
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from database import get_connection, init_db
+
+
+# =========================================================
+# ENV
+# =========================================================
+
+load_dotenv()
+
+
+# =========================================================
+# APP
+# =========================================================
+
+app = FastAPI(title="Yandex Arbitrage API")
+
+# Инициализируем базу данных при запуске приложения.
+init_db()
+
+
+# =========================================================
+# STATIC FILES
+# =========================================================
+
+app.mount(
+    "/css",
+    StaticFiles(directory="/app/public/css"),
+    name="css",
+)
+
+app.mount(
+    "/js",
+    StaticFiles(directory="/app/public/js"),
+    name="js",
+)
+
+
+# =========================================================
+# PROJECTS
+# =========================================================
+
+PROJECTS = {
+    "barsa": {
+        "name": "Барса",
+        "object_id": "3826204",
+        "client_id": "109207081",
+        "agency_id": "472729",
+    },
+    "stolitsyno": {
+        "name": "Столицыно",
+        "object_id": "4065490",
+        "client_id": "109207139",
+        "agency_id": "472729",
+    },
+}
+
+
+# =========================================================
+# DATABASE — SAVE CALLS
+# =========================================================
+
+def save_calls_to_db(calls, project_key, project_data):
+    """
+    Сохраняет звонки из Yandex API в SQLite.
+
+    Важная логика:
+
+    При первом появлении звонка:
+        original_revenue = текущий revenue
+        current_revenue = текущий revenue
+
+    При последующих запросах:
+        original_revenue НЕ меняется
+        current_revenue обновляется
+
+    Это позволяет определить ситуацию:
+
+        15400 -> 0
+
+    как потенциальный возврат после арбитража.
+    """
+
+    connection = get_connection()
+
+    try:
+        for call in calls:
+
+            timestamp = call.get("timestamp", "")
+
+            incoming_phone = call.get(
+                "incomingPhone",
+                "",
+            )
+
+            internal_phone = call.get(
+                "internalPhone",
+                "",
+            )
+
+            # Формируем стабильный идентификатор звонка.
+            #
+            # Пока используем комбинацию проекта,
+            # времени и телефонов.
+            call_key = (
+                f"{project_key}:"
+                f"{timestamp}:"
+                f"{incoming_phone}:"
+                f"{internal_phone}"
+            )
+
+            current_revenue = int(
+                call.get("revenue", 0) or 0
+            )
+
+            existing = connection.execute(
+                """
+                SELECT
+                    id,
+                    original_revenue,
+                    current_revenue,
+                    dispute_status
+                FROM calls
+                WHERE call_key = ?
+                """,
+                (call_key,),
+            ).fetchone()
+
+            # -------------------------------------------------
+            # НОВЫЙ ЗВОНОК
+            # -------------------------------------------------
+
+            if existing is None:
+
+                connection.execute(
+                    """
+                    INSERT INTO calls (
+                        call_key,
+                        project_key,
+                        project_name,
+
+                        timestamp,
+                        incoming_phone,
+                        internal_phone,
+
+                        wait_duration,
+                        call_duration,
+
+                        object_name,
+                        object_type,
+
+                        campaign_tariff,
+                        client_tariff,
+
+                        original_revenue,
+                        current_revenue,
+
+                        dispute_status
+                    )
+                    VALUES (
+                        ?, ?, ?,
+                        ?, ?, ?,
+                        ?, ?,
+                        ?, ?,
+                        ?, ?,
+                        ?, ?,
+                        ?
+                    )
+                    """,
+                    (
+                        call_key,
+                        project_key,
+                        project_data["name"],
+
+                        timestamp,
+                        incoming_phone,
+                        internal_phone,
+
+                        call.get("waitDuration"),
+                        call.get("callDuration"),
+
+                        call.get("objectName"),
+                        call.get("objectType"),
+
+                        call.get("campaignTariff"),
+                        call.get("clientTariff"),
+
+                        current_revenue,
+                        current_revenue,
+
+                        "none",
+                    ),
+                )
+
+            # -------------------------------------------------
+            # УЖЕ СУЩЕСТВУЮЩИЙ ЗВОНОК
+            # -------------------------------------------------
+
+            else:
+
+                connection.execute(
+                    """
+                    UPDATE calls
+                    SET
+                        current_revenue = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE call_key = ?
+                    """,
+                    (
+                        current_revenue,
+                        call_key,
+                    ),
+                )
+
+        connection.commit()
+
+    finally:
+        connection.close()
+
+
+# =========================================================
+# YANDEX API
+# =========================================================
+
+YANDEX_API_URL = (
+    "https://api.realty.yandex.net/2.0/publicPartner/calls"
+)
+
+YANDEX_HEADERS = {
+    "accept": "application/json",
+    "X-Authorization": os.getenv(
+        "YANDEX_X_AUTHORIZATION"
+    ),
+}
+
+
+# =========================================================
+# FRONTEND
+# =========================================================
+
+@app.get("/")
+def root():
+    return FileResponse(
+        "/app/public/index.html"
+    )
+
+
+# =========================================================
+# PROJECTS API
+# =========================================================
+
+@app.get("/api/projects")
+def get_projects():
+    return PROJECTS
+
+
+# =========================================================
+# CALLS — SINGLE PROJECT
+# =========================================================
+
+@app.get("/api/yandex/calls/{project}")
+def get_yandex_calls(project: str):
+
+    if project not in PROJECTS:
+        raise HTTPException(
+            status_code=404,
+            detail="Проект не найден",
+        )
+
+    oauth_token = os.getenv(
+        "YANDEX_OAUTH_TOKEN"
+    )
+
+    if not oauth_token:
+        raise HTTPException(
+            status_code=500,
+            detail="YANDEX_OAUTH_TOKEN не найден в .env",
+        )
+
+    project_data = PROJECTS[project]
+
+    today = date.today()
+
+    from_date = today - timedelta(days=7)
+
+    params = {
+        "clientId": project_data["client_id"],
+        "agencyId": project_data["agency_id"],
+        "fromDate": from_date.isoformat(),
+        "toDate": today.isoformat(),
+        "pageNum": 0,
+        "pageSize": 100,
+    }
+
+    headers = {
+        **YANDEX_HEADERS,
+        "Authorization": f"OAuth {oauth_token}",
+    }
+
+    try:
+        response = requests.get(
+            YANDEX_API_URL,
+            headers=headers,
+            params=params,
+            timeout=30,
+        )
+
+    except requests.RequestException as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Ошибка соединения с Яндексом: {e}",
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail={
+                "yandex_status": response.status_code,
+                "yandex_response": response.text,
+            },
+        )
+
+    data = response.json()
+
+    calls = data.get(
+        "calls",
+        [],
+    )
+
+    # Сохраняем ВСЕ звонки,
+    # включая revenue = 0.
+    save_calls_to_db(
+        calls,
+        project,
+        project_data,
+    )
+
+    # Добавляем информацию о проекте
+    # в ответ API.
+    for call in calls:
+        call["project"] = project_data["name"]
+        call["projectKey"] = project
+
+    return {
+        "project": project_data["name"],
+        "clientId": project_data["client_id"],
+        "agencyId": project_data["agency_id"],
+        "fromDate": params["fromDate"],
+        "toDate": params["toDate"],
+
+        "totalCalls": len(calls),
+        "totalCallsFromYandex": len(calls),
+
+        "calls": calls,
+    }
+
+
+# =========================================================
+# CALLS — ALL PROJECTS
+# =========================================================
+
+@app.get("/api/yandex/calls")
+def get_all_yandex_calls(
+    from_date: str | None = None,
+    to_date: str | None = None,
+):
+
+    # -----------------------------------------------------
+    # DATES
+    # -----------------------------------------------------
+
+    today = date.today()
+
+    if from_date is None:
+        from_date = today.isoformat()
+
+    if to_date is None:
+        to_date = today.isoformat()
+
+    try:
+
+        start_date = date.fromisoformat(
+            from_date
+        )
+
+        end_date = date.fromisoformat(
+            to_date
+        )
+
+    except ValueError:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Дата должна быть в формате YYYY-MM-DD",
+        )
+
+    if start_date > end_date:
+
+        raise HTTPException(
+            status_code=400,
+            detail="from_date не может быть позже to_date",
+        )
+
+    # -----------------------------------------------------
+    # AUTH
+    # -----------------------------------------------------
+
+    oauth_token = os.getenv(
+        "YANDEX_OAUTH_TOKEN"
+    )
+
+    if not oauth_token:
+
+        raise HTTPException(
+            status_code=500,
+            detail="YANDEX_OAUTH_TOKEN не найден в .env",
+        )
+
+    # -----------------------------------------------------
+    # ALL CALLS
+    # -----------------------------------------------------
+
+    all_calls = []
+
+    # -----------------------------------------------------
+    # PROJECTS
+    # -----------------------------------------------------
+
+    for project_key, project_data in PROJECTS.items():
+
+        params = {
+            "clientId": project_data["client_id"],
+            "agencyId": project_data["agency_id"],
+            "fromDate": from_date,
+            "toDate": to_date,
+            "pageNum": 0,
+            "pageSize": 100,
+        }
+
+        headers = {
+            **YANDEX_HEADERS,
+            "Authorization": f"OAuth {oauth_token}",
+        }
+
+        # -------------------------------------------------
+        # REQUEST YANDEX
+        # -------------------------------------------------
+
+        try:
+
+            response = requests.get(
+                YANDEX_API_URL,
+                headers=headers,
+                params=params,
+                timeout=30,
+            )
+
+        except requests.RequestException as e:
+
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"Ошибка соединения с Яндексом: {e}"
+                ),
+            )
+
+        # -------------------------------------------------
+        # YANDEX ERROR
+        # -------------------------------------------------
+
+        if response.status_code != 200:
+
+            raise HTTPException(
+                status_code=response.status_code,
+                detail={
+                    "project": project_data["name"],
+                    "yandex_status": response.status_code,
+                    "yandex_response": response.text,
+                },
+            )
+
+        # -------------------------------------------------
+        # RESPONSE
+        # -------------------------------------------------
+
+        data = response.json()
+
+        calls = data.get(
+            "calls",
+            [],
+        )
+
+        # -------------------------------------------------
+        # SAVE TO DATABASE
+        # -------------------------------------------------
+
+        save_calls_to_db(
+            calls,
+            project_key,
+            project_data,
+        )
+
+        # -------------------------------------------------
+        # ADD PROJECT DATA
+        # -------------------------------------------------
+
+        for call in calls:
+
+            call["project"] = project_data["name"]
+
+            call["projectKey"] = project_key
+
+            all_calls.append(call)
+
+    # -----------------------------------------------------
+    # SORT
+    # -----------------------------------------------------
+
+    all_calls.sort(
+        key=lambda call: call.get(
+            "timestamp",
+            ""
+        ),
+        reverse=True,
+    )
+
+    # -----------------------------------------------------
+    # TOTAL EXPENSE
+    # -----------------------------------------------------
+
+    # В расходы попадают только реальные начисления.
+    #
+    # Поэтому:
+    #
+    # 15400
+    # 12300
+    # 0
+    #
+    # даст:
+    #
+    # 27700 ₽
+
+    total_expense = sum(
+        int(call.get("revenue", 0) or 0)
+        for call in all_calls
+    )
+
+    # -----------------------------------------------------
+    # RESPONSE
+    # -----------------------------------------------------
+
+    return {
+        "fromDate": from_date,
+        "toDate": to_date,
+
+        # Все звонки, включая revenue = 0.
+        "totalCalls": len(all_calls),
+
+        # Общая сумма только платных звонков.
+        "totalExpense": total_expense,
+
+        "calls": all_calls,
+    }
+
+
+# =========================================================
+# DEBUG — RAW YANDEX CALLS
+# =========================================================
+
+@app.get("/api/debug/yandex/calls/{project}")
+def debug_yandex_calls(project: str):
+
+    if project not in PROJECTS:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Проект не найден",
+        )
+
+    oauth_token = os.getenv(
+        "YANDEX_OAUTH_TOKEN"
+    )
+
+    if not oauth_token:
+
+        raise HTTPException(
+            status_code=500,
+            detail="YANDEX_OAUTH_TOKEN не найден в .env",
+        )
+
+    project_data = PROJECTS[project]
+
+    today = date.today()
+
+    from_date = today - timedelta(days=30)
+
+    params = {
+        "clientId": project_data["client_id"],
+        "agencyId": project_data["agency_id"],
+        "fromDate": from_date.isoformat(),
+        "toDate": today.isoformat(),
+        "pageNum": 0,
+        "pageSize": 100,
+    }
+
+    headers = {
+        **YANDEX_HEADERS,
+        "Authorization": f"OAuth {oauth_token}",
+    }
+
+    try:
+
+        response = requests.get(
+            YANDEX_API_URL,
+            headers=headers,
+            params=params,
+            timeout=30,
+        )
+
+    except requests.RequestException as e:
+
+        raise HTTPException(
+            status_code=502,
+            detail=f"Ошибка соединения с Яндексом: {e}",
+        )
+
+    if response.status_code != 200:
+
+        raise HTTPException(
+            status_code=response.status_code,
+            detail={
+                "yandex_status": response.status_code,
+                "yandex_response": response.text,
+            },
+        )
+
+    data = response.json()
+
+    return {
+        "project": project_data["name"],
+        "fromDate": params["fromDate"],
+        "toDate": params["toDate"],
+        "totalCallsFromYandex": len(
+            data.get("calls", [])
+        ),
+        "calls": data.get(
+            "calls",
+            [],
+        ),
+    }

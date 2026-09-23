@@ -29,16 +29,3 @@ Thumbs.db
 *.tmp
 *.temp
 *.swp
-
-# Python cache
-__pycache__/
-*.pyc
-
-# Backups
-*.bak
-*.backup
-
-# Local server data
-data/
-public/js/app.js.before-api
-server.py.before-static

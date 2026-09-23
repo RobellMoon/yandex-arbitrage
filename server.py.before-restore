@@ -7,6 +7,7 @@ from typing import Optional
 import requests
 from fastapi import FastAPI, HTTPException, Query, Request, Form
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
@@ -27,21 +28,9 @@ DB_PATH = os.getenv(
     "/app/data/arbitrage.db"
 )
 
-
 AUTH_LOGIN = os.getenv("AUTH_LOGIN")
 AUTH_PASSWORD = os.getenv("AUTH_PASSWORD")
-
-sessions = set()
-
-
-def is_authenticated(request: Request) -> bool:
-    session_id = request.cookies.get("session_id")
-
-    if not session_id:
-        return False
-
-    return session_id in sessions
-
+SESSION_SECRET = os.getenv("SESSION_SECRET")
 
 # ============================================================
 # PROJECTS
@@ -73,6 +62,182 @@ app = FastAPI(
     title="Yandex Arbitrage",
     version="1.0.0"
 )
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="arbitrage_session",
+    max_age=60 * 60 * 24 * 30,
+    https_only=True,
+    same_site="lax",
+)
+
+# ============================================================
+# AUTHORIZATION
+# ============================================================
+
+sessions = set()
+
+
+def is_authenticated(request: Request) -> bool:
+    session_id = request.cookies.get("session_id")
+
+    if not session_id:
+        return False
+
+    return session_id in sessions
+
+# ============================================================
+# LOGIN
+# ============================================================
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return """
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Вход — Yandex Arbitrage</title>
+        <style>
+            body {
+                margin: 0;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #f5f5f5;
+                font-family: Arial, sans-serif;
+            }
+
+            .login-wrapper {
+    width: 424px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.login-logo {
+    width: 150px;
+    height: auto;
+    display: block;
+    margin: 0 auto 25px auto;
+}
+
+            .login-box {
+                width: 360px;
+                padding: 32px;
+                background: white;
+                border-radius: 16px;
+                box-shadow: 0 10px 40px rgba(0,0,0,.08);
+                text-align: center;
+            }
+
+            h1 {
+                margin: 0 0 24px;
+                font-size: 24px;
+            }
+
+            input {
+                width: 100%;
+                box-sizing: border-box;
+                padding: 13px;
+                margin-bottom: 12px;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                font-size: 15px;
+            }
+
+            button {
+                width: 100%;
+                padding: 13px;
+                border: 0;
+                border-radius: 8px;
+                background: #111;
+                color: white;
+                font-size: 15px;
+                cursor: pointer;
+            }
+
+            .error {
+                color: #d00;
+                margin-bottom: 12px;
+                font-size: 14px;
+            }
+        </style>
+    </head>
+
+    <body>
+    <div class="login-wrapper">
+
+        <img
+            src="https://feed.tw1.ru/Tochno_Arbitrage/tochno-favicon.png"
+            class="login-logo"
+            alt="ТОЧНО"
+        >
+
+        <div class="login-box">
+            <h1>ТОЧНО Арбитраж</h1>
+
+    <form method="post" action="/login">
+                <input
+                    type="text"
+                    name="login"
+                    placeholder="Логин"
+                    required
+                >
+
+                <input
+                    type="password"
+                    name="password"
+                    placeholder="Пароль"
+                    required
+                >
+
+                <button type="submit">
+                    Войти
+                </button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.post("/login")
+def login(
+    login: str = Form(...),
+    password: str = Form(...)
+):
+    if (
+        login != AUTH_LOGIN
+        or password != AUTH_PASSWORD
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Неверный логин или пароль"
+        )
+
+    import secrets
+
+    session_id = secrets.token_urlsafe(32)
+    sessions.add(session_id)
+
+    response = RedirectResponse(
+        url="/",
+        status_code=303
+    )
+
+    response.set_cookie(
+        key="session_id",
+        value=session_id,
+        httponly=True,
+        samesite="lax"
+    )
+
+    return response
+
 
 
 # ============================================================
@@ -762,11 +927,23 @@ def fetch_project_calls(
 # API: ALL CALLS
 # ============================================================
 
-@app.get("/api/yandex/calls")
-def get_yandex_calls(
+@app.get("/api/yandex/calls/{project_key}")
+def get_project_calls(
+    request: Request,
+    project_key: str,
     from_date: str = Query(...),
     to_date: str = Query(...)
 ):
+    if not is_authenticated(request):
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
+    if not is_authenticated(request):
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
 
     # Синхронизируем оба проекта.
     for project_key in PROJECTS:
@@ -865,10 +1042,16 @@ def get_yandex_calls(
 
 @app.get("/api/yandex/calls/{project_key}")
 def get_project_calls(
+    request: Request,
     project_key: str,
     from_date: str = Query(...),
     to_date: str = Query(...)
 ):
+    if not is_authenticated(request):
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
 
     if project_key not in PROJECTS:
         raise HTTPException(
@@ -959,8 +1142,15 @@ def get_project_calls(
 
 @app.get("/api/debug/yandex/calls/{project_key}")
 def debug_yandex_calls(
+    request: Request,
     project_key: str
 ):
+
+    if not is_authenticated(request):
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
 
     if project_key not in PROJECTS:
         raise HTTPException(
@@ -1030,6 +1220,60 @@ def debug_yandex_calls(
 # HEALTH
 # ============================================================
 
+@app.post("/api/yandex/calls/mark-pending")
+def mark_calls_pending(
+    request: Request,
+    call_ids: list[int]
+):
+    if not is_authenticated(request):
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
+
+    if not call_ids:
+        return {
+            "success": True,
+            "updated": 0
+        }
+
+    conn = get_connection()
+
+    now = datetime.now().isoformat(
+        timespec="seconds"
+    )
+
+    updated = 0
+
+    for call_id in call_ids:
+
+        cursor = conn.execute(
+            """
+            UPDATE calls
+            SET
+                dispute_status = 'pending',
+                dispute_exported_at = ?,
+                dispute_updated_at = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                now,
+                now,
+                call_id
+            )
+        )
+
+        updated += cursor.rowcount
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "updated": updated
+    }
+
 @app.get("/api/health")
 def health():
 
@@ -1045,17 +1289,19 @@ def health():
 # FRONTEND
 # ============================================================
 
+# ============================================================
+# LOGIN
+# ============================================================
 
-@app.get("/login", response_class=HTMLResponse)
+@app.get("/login")
 def login_page():
-    return """
+    return HTMLResponse("""
     <!DOCTYPE html>
     <html lang="ru">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Вход — ТОЧНО Арбитраж</title>
-
+        <title>Авторизация</title>
         <style>
             body {
                 margin: 0;
@@ -1067,110 +1313,111 @@ def login_page():
                 font-family: Arial, sans-serif;
             }
 
-            .login-wrapper {
-                width: 424px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-            }
-
-            .login-logo {
-                width: 150px;
-                height: auto;
-                display: block;
-                margin: 0 auto 25px auto;
-            }
-
             .login-box {
-                width: 360px;
-                padding: 32px;
+                width: 320px;
+                padding: 30px;
                 background: white;
-                border-radius: 16px;
-                box-shadow: 0 10px 40px rgba(0,0,0,.08);
-                text-align: center;
+                border-radius: 12px;
+                box-shadow: 0 10px 30px rgba(0,0,0,.08);
             }
 
-            h1 {
+            .login-wrapper {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.login-logo {
+    width: 150px;
+    height: auto;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 25px;
+}
+
+            h2 {
                 margin: 0 0 24px;
-                font-size: 24px;
             }
 
             input {
-                width: 100%;
                 box-sizing: border-box;
-                padding: 13px;
+                width: 100%;
+                padding: 12px;
                 margin-bottom: 12px;
                 border: 1px solid #ddd;
                 border-radius: 8px;
-                font-size: 15px;
+                font-size: 14px;
             }
 
             button {
                 width: 100%;
-                padding: 13px;
+                padding: 12px;
                 border: 0;
                 border-radius: 8px;
                 background: #111;
                 color: white;
-                font-size: 15px;
                 cursor: pointer;
+                font-size: 14px;
+            }
+
+            .error {
+                color: #d00;
+                margin-bottom: 12px;
+                font-size: 14px;
             }
         </style>
     </head>
-
     <body>
-        <div class="login-wrapper">
+        <div class="login-box">
+            <h2>Вход</h2>
 
-            <img
-                src="https://feed.tw1.ru/Tochno_Arbitrage/tochno-favicon.png"
-                class="login-logo"
-                alt="ТОЧНО"
-            >
+            <form method="post" action="/login">
+                <input
+                    type="text"
+                    name="login"
+                    placeholder="Логин"
+                    required
+                >
 
-            <div class="login-box">
-                <h1>ТОЧНО Арбитраж</h1>
+                <input
+                    type="password"
+                    name="password"
+                    placeholder="Пароль"
+                    required
+                >
 
-                <form method="post" action="/login">
-                    <input
-                        type="text"
-                        name="login"
-                        placeholder="Логин"
-                        required
-                    >
-
-                    <input
-                        type="password"
-                        name="password"
-                        placeholder="Пароль"
-                        required
-                    >
-
-                    <button type="submit">
-                        Войти
-                    </button>
-                </form>
-            </div>
-
+                <button type="submit">
+                    Войти
+                </button>
+            </form>
         </div>
-    </body>
+    </div>
+</body>
     </html>
-    """
+    """)
 
 
 @app.post("/login")
 def login(
+    request: Request,
     login: str = Form(...),
     password: str = Form(...)
 ):
-    if login != AUTH_LOGIN or password != AUTH_PASSWORD:
-        raise HTTPException(
-            status_code=401,
-            detail="Неверный логин или пароль"
+    if (
+        login != AUTH_LOGIN
+        or password != AUTH_PASSWORD
+    ):
+        return HTMLResponse(
+            """
+            <h3>Неверный логин или пароль</h3>
+            <a href="/login">Назад</a>
+            """,
+            status_code=401
         )
 
-    import secrets
-
-    session_id = secrets.token_urlsafe(32)
+    session_id = os.urandom(32).hex()
     sessions.add(session_id)
 
     response = RedirectResponse(
@@ -1179,14 +1426,15 @@ def login(
     )
 
     response.set_cookie(
-        key="session_id",
-        value=session_id,
+        "session_id",
+        session_id,
         httponly=True,
-        samesite="lax"
+        secure=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30
     )
 
     return response
-
 
 @app.get("/")
 def index(request: Request):
